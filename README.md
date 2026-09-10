@@ -1,6 +1,6 @@
-## PacMan like
+## PacMan like !!!
 
-Vamos a crear un juego de PacMan como el juego de PacMan original, pero con una interfaz gráfica más moderna y sencilla.
+Juego de PacMan como el juego original de PacMan , pero con una interfaz gráfica más moderna y sencilla.
 
 ## Tecnologías
 
@@ -10,4 +10,4 @@ Vamos a crear un juego de PacMan como el juego de PacMan original, pero con una 
 
 # Spec Driven Development
 
-El proyecto sirve para aprender este enfoque de desarrollo.
+Proyecto para aprender enfoque de desarrollo.
