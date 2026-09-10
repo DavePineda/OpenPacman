@@ -1,4 +1,4 @@
-## PacMan like
+## PacMan like !!!
 
 Juego de PacMan como el juego original de PacMan , pero con una interfaz gráfica más moderna y sencilla.
 
