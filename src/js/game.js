@@ -161,12 +161,6 @@ function decideGhost( game, g ) {
   if ( g.kind === 'hunter' ) {
     g.dir = chaseDir( game, g, choices );
   } else if ( g.kind === 'erratic' ) {
-    // Alterna entre perseguir (chase) y vagar (wander) cada ~5 s.
-    g.modeTimer--;
-    if ( g.modeTimer <= 0 ) {
-      g.mode = g.mode === 'chase' ? 'wander' : 'chase';
-      g.modeTimer = ERRATIC_MODE_FRAMES;
-    }
     g.dir = g.mode === 'chase'
       ? chaseDir( game, g, choices )
       : wanderDir( choices );
@@ -186,6 +180,16 @@ function decideGhost( game, g ) {
 function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
+
+  // Alterna entre perseguir (chase) y vagar (wander) cada ~5 s.
+  // Se decrementa por frame (no al alinearse) para que el ciclo sea real.
+  if ( g.kind === 'erratic' ) {
+    g.modeTimer--;
+    if ( g.modeTimer <= 0 ) {
+      g.mode = g.mode === 'chase' ? 'wander' : 'chase';
+      g.modeTimer = ERRATIC_MODE_FRAMES;
+    }
+  }
 
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
