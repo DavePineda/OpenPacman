@@ -12,6 +12,8 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 
 const PACMAN_SPEED = 0.1; // 1/10 celda/frame -> alinea cada 10 frames
 const ERRATIC_MODE_FRAMES = 300; // 300 frames ≈ 5 s a 60 fps
+const TIMID_FLEE_DIST = 6;       // huye si Pacman esta a menos de 6 celdas
+const TIMID_PATROL = { x: 1, y: 1 }; // esquina de patrulla del timido
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
@@ -113,24 +115,34 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
-// Elige la direccion que minimiza la distancia Manhattan a Pacman (greedy).
-function chaseDir( game, g, choices ) {
-  const p = game.pacman;
-  const px = Math.round( p.x );
-  const py = Math.round( p.y );
+// Elige la direccion greedy (Manhattan) que mas acerca a (tx,ty),
+// o que mas aleja si maximize es true.
+function greedyDir( g, choices, tx, ty, maximize ) {
   let best = choices[ 0 ];
-  let bestDist = Infinity;
+  let bestDist = maximize ? -Infinity : Infinity;
   for ( const dir of choices ) {
     const d = DIRS[ dir ];
     const nx = g.x + d.x;
     const ny = g.y + d.y;
-    const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-    if ( dist < bestDist ) {
+    const dist = Math.abs( nx - tx ) + Math.abs( ny - ty );
+    const better = maximize ? dist > bestDist : dist < bestDist;
+    if ( better ) {
       bestDist = dist;
       best = dir;
     }
   }
   return best;
+}
+
+function pacmanDist( game, g ) {
+  const p = game.pacman;
+  return Math.abs( Math.round( g.x ) - Math.round( p.x ) )
+    + Math.abs( Math.round( g.y ) - Math.round( p.y ) );
+}
+
+function chaseDir( game, g, choices ) {
+  const p = game.pacman;
+  return greedyDir( g, choices, Math.round( p.x ), Math.round( p.y ), false );
 }
 
 function wanderDir( choices ) {
@@ -158,6 +170,14 @@ function decideGhost( game, g ) {
     g.dir = g.mode === 'chase'
       ? chaseDir( game, g, choices )
       : wanderDir( choices );
+  } else if ( g.kind === 'timid' ) {
+    // Huye de Pacman si esta cerca; si no, patrulla hacia su esquina.
+    if ( pacmanDist( game, g ) < TIMID_FLEE_DIST ) {
+      const p = game.pacman;
+      g.dir = greedyDir( g, choices, Math.round( p.x ), Math.round( p.y ), true );
+    } else {
+      g.dir = greedyDir( g, choices, TIMID_PATROL.x, TIMID_PATROL.y, false );
+    }
   } else {
     g.dir = wanderDir( choices );
   }
