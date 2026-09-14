@@ -55,6 +55,13 @@ function aligned( v ) {
   return Math.abs( v - Math.round( v ) ) < 1e-3;
 }
 
+// Distancia hasta el siguiente borde de celda en la direccion delta (-1, 0, 1).
+function distToEdge( v, delta ) {
+  if ( delta > 0 ) return Math.floor( v + 1e-6 ) + 1 - v;
+  if ( delta < 0 ) return v - ( Math.ceil( v - 1e-6 ) - 1 );
+  return Infinity;
+}
+
 // Una celda es muro para el actor dado?
 //   pacman: bloqueado por pared (1) y puerta (3)
 //   ghost:  bloqueado solo por pared (1)
@@ -191,17 +198,29 @@ function moveGhost( game, g ) {
     }
   }
 
-  if ( aligned( g.x ) && aligned( g.y ) ) {
-    g.x = Math.round( g.x );
-    g.y = Math.round( g.y );
-    decideGhost( game, g );
-    if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
-  }
+  // Avanza como maximo hasta el siguiente borde de celda, decide en cada
+  // celda y continua con el remanente del frame.
+  let remaining = g.speed;
+  while ( remaining > 1e-9 ) {
+    if ( aligned( g.x ) && aligned( g.y ) ) {
+      g.x = Math.round( g.x );
+      g.y = Math.round( g.y );
+      decideGhost( game, g );
+      if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
+    }
 
-  const d = DIRS[ g.dir ];
-  g.x += d.x * g.speed;
-  g.y += d.y * g.speed;
-  wrapTunnel( g, width );
+    const d = DIRS[ g.dir ];
+    const edgeDist = Math.min(
+      d.x !== 0 ? distToEdge( g.x, d.x ) : Infinity,
+      d.y !== 0 ? distToEdge( g.y, d.y ) : Infinity
+    );
+    const step = Math.min( remaining, edgeDist );
+
+    g.x += d.x * step;
+    g.y += d.y * step;
+    wrapTunnel( g, width );
+    remaining -= step;
+  }
 }
 
 function resetPositions( game ) {
