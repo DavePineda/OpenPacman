@@ -1,6 +1,6 @@
 # SPEC 02 — Salida de los fantasmas de la pen
 
-> **Estado:** aprobado
+> **Estado:** implementado
 > **Depende de:** SPEC 01
 > **Fecha:** 2026-09-14
 > **Objetivo:** Hacer que los fantasmas salgan uno por uno de la pen por la puerta al iniciar la partida (y al perder una vida), y que decidan en cada celda para no atravesar paredes.
