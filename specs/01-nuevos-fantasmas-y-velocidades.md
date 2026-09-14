@@ -1,6 +1,6 @@
 # SPEC 01 — Nuevos fantasmas y ajuste de velocidades
 
-> **Estado:** aprobado
+> **Estado:** implementado
 > **Depende de:** —
 > **Fecha:** 2026-09-10
 > **Objetivo:** Añadir 2 fantasmas con comportamientos propios (impredecible y tímido) y reducir las velocidades de Pacman y del hunter para que el juego sea manejable y permita girar por los pasillos intermedios.

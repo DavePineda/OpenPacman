@@ -14,6 +14,7 @@ const PACMAN_SPEED = 0.1; // 1/10 celda/frame -> alinea cada 10 frames
 const ERRATIC_MODE_FRAMES = 300; // 300 frames ≈ 5 s a 60 fps
 const TIMID_FLEE_DIST = 6;       // huye si Pacman esta a menos de 6 celdas
 const TIMID_PATROL = { x: 1, y: 1 }; // esquina de patrulla del timido
+const PEN_EXIT = { x: 13, y: 11 }; // celda de salida: cruzando la puerta de la col 13
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
@@ -44,6 +45,8 @@ function createGame() {
       dir: 'up',
       speed: g.speed,
       kind: g.kind,
+      phase: 'waiting',
+      releaseTimer: g.releaseDelay,
       ...( g.kind === 'erratic'
         ? { mode: 'chase', modeTimer: ERRATIC_MODE_FRAMES }
         : {} ),
@@ -55,27 +58,37 @@ function aligned( v ) {
   return Math.abs( v - Math.round( v ) ) < 1e-3;
 }
 
+// Distancia hasta el siguiente borde de celda en la direccion delta (-1, 0, 1).
+function distToEdge( v, delta ) {
+  if ( delta > 0 ) return Math.floor( v + 1e-6 ) + 1 - v;
+  if ( delta < 0 ) return v - ( Math.ceil( v - 1e-6 ) - 1 );
+  return Infinity;
+}
+
 // Una celda es muro para el actor dado?
 //   pacman: bloqueado por pared (1) y puerta (3)
-//   ghost:  bloqueado solo por pared (1)
-function isWall( grid, x, y, actor ) {
+//   ghost:  bloqueado por pared (1); la puerta (3) solo la cruzan los 'exiting'
+function isWall( grid, x, y, actor, phase ) {
   if ( y < 0 || y >= grid.length ) return true;
   if ( x < 0 || x >= grid[ 0 ].length ) return true;
   const v = grid[ y ][ x ];
   if ( v === 1 ) return true;
-  if ( v === 3 && actor === 'pacman' ) return true;
+  if ( v === 3 ) {
+    if ( actor === 'pacman' ) return true;
+    if ( actor === 'ghost' && phase !== 'exiting' ) return true;
+  }
   return false;
 }
 
 // Puede el actor avanzar desde (x,y) en la direccion dir?
-function canMove( grid, x, y, dir, actor ) {
+function canMove( grid, x, y, dir, actor, phase ) {
   const d = DIRS[ dir ];
   if ( !d ) return false;
   const tx = x + d.x;
   const ty = y + d.y;
   // Tunel: salir por un borde en la fila del tunel siempre es valido.
   if ( ty === TUNNEL_ROW && ( tx < 0 || tx >= grid[ 0 ].length ) ) return true;
-  return !isWall( grid, tx, ty, actor );
+  return !isWall( grid, tx, ty, actor, phase );
 }
 
 function wrapTunnel( a, width ) {
@@ -153,7 +166,7 @@ function decideGhost( game, g ) {
   const grid = game.grid;
 
   const options = Object.keys( DIRS ).filter(
-    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
+    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost', g.phase )
   );
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
@@ -177,6 +190,15 @@ function decideGhost( game, g ) {
   }
 }
 
+// Direccion de salida: horizontal hasta la columna 13 en la fila de la pen,
+// y luego hacia arriba hasta (13,11). Ignora la personalidad del fantasma.
+function exitDir( g ) {
+  if ( g.y === TUNNEL_ROW && g.x !== PEN_EXIT.x ) {
+    return g.x > PEN_EXIT.x ? 'left' : 'right';
+  }
+  return 'up';
+}
+
 function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
@@ -191,17 +213,44 @@ function moveGhost( game, g ) {
     }
   }
 
-  if ( aligned( g.x ) && aligned( g.y ) ) {
-    g.x = Math.round( g.x );
-    g.y = Math.round( g.y );
-    decideGhost( game, g );
-    if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
+  // En la pen espera quieto hasta que termine su temporizador de liberacion.
+  if ( g.phase === 'waiting' ) {
+    g.releaseTimer--;
+    if ( g.releaseTimer > 0 ) return;
+    g.phase = 'exiting';
   }
 
-  const d = DIRS[ g.dir ];
-  g.x += d.x * g.speed;
-  g.y += d.y * g.speed;
-  wrapTunnel( g, width );
+  // Avanza como maximo hasta el siguiente borde de celda, decide en cada
+  // celda y continua con el remanente del frame.
+  let remaining = g.speed;
+  while ( remaining > 1e-9 ) {
+    if ( aligned( g.x ) && aligned( g.y ) ) {
+      g.x = Math.round( g.x );
+      g.y = Math.round( g.y );
+
+      if ( g.phase === 'exiting' ) {
+        if ( g.x === PEN_EXIT.x && g.y === PEN_EXIT.y ) {
+          g.phase = 'free';
+        } else {
+          g.dir = exitDir( g );
+        }
+      }
+      if ( g.phase === 'free' ) decideGhost( game, g );
+      if ( !canMove( grid, g.x, g.y, g.dir, 'ghost', g.phase ) ) return;
+    }
+
+    const d = DIRS[ g.dir ];
+    const edgeDist = Math.min(
+      d.x !== 0 ? distToEdge( g.x, d.x ) : Infinity,
+      d.y !== 0 ? distToEdge( g.y, d.y ) : Infinity
+    );
+    const step = Math.min( remaining, edgeDist );
+
+    g.x += d.x * step;
+    g.y += d.y * step;
+    wrapTunnel( g, width );
+    remaining -= step;
+  }
 }
 
 function resetPositions( game ) {
@@ -214,6 +263,8 @@ function resetPositions( game ) {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.phase = 'waiting';
+    g.releaseTimer = GHOST_STARTS[ i ].releaseDelay;
     if ( g.kind === 'erratic' ) {
       g.mode = 'chase';
       g.modeTimer = ERRATIC_MODE_FRAMES;
