@@ -14,6 +14,7 @@ const PACMAN_SPEED = 0.1; // 1/10 celda/frame -> alinea cada 10 frames
 const ERRATIC_MODE_FRAMES = 300; // 300 frames ≈ 5 s a 60 fps
 const TIMID_FLEE_DIST = 6;       // huye si Pacman esta a menos de 6 celdas
 const TIMID_PATROL = { x: 1, y: 1 }; // esquina de patrulla del timido
+const PEN_EXIT = { x: 13, y: 11 }; // celda de salida: cruzando la puerta de la col 13
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
@@ -44,6 +45,8 @@ function createGame() {
       dir: 'up',
       speed: g.speed,
       kind: g.kind,
+      phase: 'waiting',
+      releaseTimer: g.releaseDelay,
       ...( g.kind === 'erratic'
         ? { mode: 'chase', modeTimer: ERRATIC_MODE_FRAMES }
         : {} ),
@@ -184,6 +187,15 @@ function decideGhost( game, g ) {
   }
 }
 
+// Direccion de salida: horizontal hasta la columna 13 en la fila de la pen,
+// y luego hacia arriba hasta (13,11). Ignora la personalidad del fantasma.
+function exitDir( g ) {
+  if ( g.y === TUNNEL_ROW && g.x !== PEN_EXIT.x ) {
+    return g.x > PEN_EXIT.x ? 'left' : 'right';
+  }
+  return 'up';
+}
+
 function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
@@ -198,6 +210,13 @@ function moveGhost( game, g ) {
     }
   }
 
+  // En la pen espera quieto hasta que termine su temporizador de liberacion.
+  if ( g.phase === 'waiting' ) {
+    g.releaseTimer--;
+    if ( g.releaseTimer > 0 ) return;
+    g.phase = 'exiting';
+  }
+
   // Avanza como maximo hasta el siguiente borde de celda, decide en cada
   // celda y continua con el remanente del frame.
   let remaining = g.speed;
@@ -205,7 +224,15 @@ function moveGhost( game, g ) {
     if ( aligned( g.x ) && aligned( g.y ) ) {
       g.x = Math.round( g.x );
       g.y = Math.round( g.y );
-      decideGhost( game, g );
+
+      if ( g.phase === 'exiting' ) {
+        if ( g.x === PEN_EXIT.x && g.y === PEN_EXIT.y ) {
+          g.phase = 'free';
+        } else {
+          g.dir = exitDir( g );
+        }
+      }
+      if ( g.phase === 'free' ) decideGhost( game, g );
       if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
     }
 
@@ -233,6 +260,8 @@ function resetPositions( game ) {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.phase = 'waiting';
+    g.releaseTimer = GHOST_STARTS[ i ].releaseDelay;
     if ( g.kind === 'erratic' ) {
       g.mode = 'chase';
       g.modeTimer = ERRATIC_MODE_FRAMES;
